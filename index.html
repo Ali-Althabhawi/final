@@ -1,0 +1,670 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Neural Network Demo — Political Affiliation (Synthetic)</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;max-width:1000px;margin:24px auto;padding:0 16px;color:#111}
+    table{border-collapse:collapse;width:100%;margin-top:12px}
+    th,td{border:1px solid #ddd;padding:8px;text-align:left}
+    th{background:#f4f4f4}
+    .diagram{width:100%;height:560px;background:#fff;border:1px solid #eee;margin-top:12px}
+    .badge{display:inline-block;padding:4px 8px;border-radius:12px;background:#eef}
+    .pred{font-weight:600}
+    .ok{color:green}
+    .bad{color:red}
+    .note{font-size:0.95em;color:#333}
+    pre{background:#f7f7f7;padding:8px;border-radius:4px;overflow:auto}
+  </style>
+</head>
+<body>
+  <h1>Neural Network Demo — Political Affiliation (Synthetic)</h1>
+
+  <p class="note">This is an educational demo using fully synthetic people and a simulated, premade model. Do not use for real profiling.</p>
+
+  <h2>What we'll show</h2>
+  <ul>
+    <li>Synthetic dataset: 10 people with realistic-sounding attributes</li>
+    <li>A simple explanation of what hidden layers do (plain language)</li>
+    <li>An illustrative network diagram (input → 3 hidden layers → output)</li>
+    <li>Premade simulated predictions (no training yet) compared to the actual labels</li>
+  </ul>
+
+  <h2>Inputs / features used</h2>
+  <p class="note">Using these features: <strong>age</strong>, <strong>income</strong>, <strong>disability</strong> (0/1), <strong>guns</strong> (pro/neutral/anti), <strong>abortion</strong> (pro/neutral/anti), <strong>city_population</strong>, <strong>race</strong>, <strong>job_type</strong>, <strong>education</strong>, <strong>religion</strong>, <strong>universal_healthcare</strong> (pro/against), <strong>free_college</strong> (pro/against), <strong>billionaires_support</strong> (pro/against).</p>
+
+  <h2>Quick plain-language: what do hidden layers do?</h2>
+  <p class="note">Think of the network as a sequence of processing steps. The input layer reads raw features (age, income, etc.). Each hidden layer transforms those numbers into new signals that highlight patterns. Early hidden layers find simple patterns ("likes guns and high income"), middle layers combine those into higher-level cues ("likely fiscally conservative"), and later hidden layers combine cues into a final opinion signal used by the output layer to pick a class. Hidden layers let the model learn non-linear rules and combine many simple features into complex concepts.</p>
+
+  <h2>Illustrative network architecture</h2>
+  <div id="accuracy" style="font-weight:700;margin-bottom:8px">Accuracy: —</div>
+  <div id="error" style="color:#a00;font-weight:700;margin-bottom:8px"></div>
+  <div id="testAccuracy" style="font-weight:600;margin-bottom:8px;color:#333"></div>
+  <div class="diagram">
+    <!-- Larger, styled SVG showing 10 inputs, 3 hidden layers (8,6,4), 6 outputs -->
+    <svg viewBox="0 0 1400 520" preserveAspectRatio="xMidYMid meet" style="width:100%;height:520px">
+      <defs>
+        <linearGradient id="nodeGrad" x1="0" x2="1">
+          <stop offset="0%" stop-color="#e6f2ff" />
+          <stop offset="100%" stop-color="#cfe8ff" />
+        </linearGradient>
+        <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.15" />
+        </filter>
+      </defs>
+      <!-- background panel -->
+      <rect x="6" y="6" width="1388" height="508" rx="10" fill="#fbfdff" stroke="#eef3fb"></rect>
+      <!-- draw nodes via JS after load -->
+    </svg>
+  </div>
+
+  <h2 id="dataHeading">Dataset — showing 10 of 50 synthetic people</h2>
+  <div style="display:flex;gap:12px;align-items:center;margin-top:6px">
+    <label for="showCount">Show:</label>
+    <select id="showCount">
+      <option value="10">10</option>
+      <option value="25">25</option>
+      <option value="50">50</option>
+      <option value="100">100</option>
+    </select>
+  </div>
+  <div style="overflow:auto;margin-top:8px">
+  <table id="peopleTable">
+    <thead>
+      <tr>
+        <th>Name</th><th>Gender</th><th>Age</th><th>Income</th><th>Disability</th><th>Guns</th><th>Abortion</th><th>City Pop</th><th>Race</th><th>Job</th><th>Education</th><th>Religion</th><th>Universal HC</th><th>Free College</th><th>Billionaires</th><th>Nationalize</th><th>Guaranteed Job</th><th>Eviction Ban</th><th>Break Banks</th><th>Actual</th><th>Predicted</th>
+      </tr>
+    </thead>
+    <tbody>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>How predictions are produced (now)</h3>
+  <p class="note">For this step we use a premade, deterministic scoring function (a stand-in for a trained network) to compute a probability over 6 classes and pick the top one. Later we'll implement interactive training and visualization.</p>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.8.0/dist/tf.min.js"></script>
+  <script>
+    // Global error handlers to show runtime problems on the page (helps debugging)
+    window.addEventListener('error', function(ev){
+      const err = document.getElementById('error');
+      if(err) err.textContent = 'Error: ' + (ev.error && ev.error.message ? ev.error.message : ev.message || ev.filename || 'Unknown');
+      console.error(ev.error || ev);
+    });
+    window.addEventListener('unhandledrejection', function(ev){
+      const err = document.getElementById('error');
+      if(err) err.textContent = 'Unhandled promise rejection: ' + (ev.reason && ev.reason.message ? ev.reason.message : String(ev.reason));
+      console.error(ev.reason);
+    });
+
+    // Classes
+    const CLASSES = ['Democrat','Republican','Libertarian','Anarchist','Socialist'];
+
+    // Helper maps (moved early so other code can use them safely)
+    const gunsMap = {pro:1, neutral:0, anti:-1};
+    const abortionMap = {pro:1, neutral:0, anti:-1};
+    const raceMap = {White:0.3, Asian:0.1, Hispanic:0.0, Black:-0.1, Other:0.0};
+    const jobMap = {white:0.2, blue:-0.1, other:0.0};
+    const religionMap = {Christian:0.4, Muslim:0.1, Hindu:0.1, Jewish:0.1, Atheist:-0.3, Other:0.0};
+    const eduMap = {none:0, elementary:1, middle:2, highschool:3, some_college:4, college:5, masters:6, postgrad:7};
+    const uhMap = {pro:1, against:-1};
+    const fcMap = {pro:1, against:-1};
+    const billMap = {pro:1, against:-1};
+
+    // US-like race priors (approximate, for synthetic data realism)
+    const RACE_PRIOR = { White:0.61, Hispanic:0.18, Black:0.12, Asian:0.06, Other:0.03 };
+
+    // name pools by broad group (used to create believable, group-typical names)
+    const NAMES_BY_RACE = {
+      White: {
+        female: ['Emma Johnson','Olivia Miller','Ava Wilson','Sophia Taylor','Isabella Thomas','Mia White'],
+        male: ['Liam Brown','Noah Davis','William Moore','James Anderson','Benjamin Jackson','Lucas Harris'],
+        other: ['Taylor Morgan','Alex Rivera']
+      },
+      Hispanic: {
+        female: ['Sofia Garcia','Isabella Rodriguez','Camila Hernandez','Valentina Perez','Lucia Torres'],
+        male: ['Mateo Martinez','Sebastian Lopez','Diego Gonzalez','Jose Ramirez'],
+        other: []
+      },
+      Black: {
+        female: ['Aaliyah Robinson','Imani Brooks','Nia Young','Zoe Scott'],
+        male: ['Malik Walker','Jalen Harris','Elijah King','Darnell Green'],
+        other: []
+      },
+      Asian: {
+        female: ['Maya Patel','Sofia Chen','Asha Kumar','Isabella Kim'],
+        male: ['Arjun Singh','Liam Nguyen','Ethan Lee'],
+        other: []
+      },
+      Other: {
+        female: ['Jordan Lee','Casey Brooks'],
+        male: ['Alex Rivera'],
+        other: []
+      }
+    };
+
+    // baseline religion priors (approximate US-like mix)
+    const RELIGION_BASE = { Christian:0.63, Atheist:0.22, Jewish:0.02, Muslim:0.01, Hindu:0.01, Other:0.11 };
+
+    // pick with weighted probs helper
+    function pickWeighted(items, weights){
+      let r = Math.random(); let cum = 0;
+      for(let i=0;i<items.length;i++){ cum += weights[i]; if(r < cum) return items[i]; }
+      return items[items.length-1];
+    }
+
+    // sample a race using the baseline priors and a small class modifier
+    function sampleRaceForClass(cls){
+      // start from base probs array in same order as earlier usage
+      const keys = ['White','Asian','Hispanic','Black','Other'];
+      const base = keys.map(k=>RACE_PRIOR[k]||0.0);
+      // small class-based multipliers to reflect turnout/demographic skews
+      const multipliers = { Democrat:[0.95,1.2,1.15,1.1,1.0], Republican:[1.15,0.9,0.85,0.85,1.0], Libertarian:[1.0,1.0,0.95,0.9,1.0], Anarchist:[0.9,1.1,1.05,0.95,1.0], Socialist:[0.9,1.1,1.2,1.0,1.0], Independent:[1.0,1.0,1.0,1.0,1.0] };
+      const m = multipliers[cls] || multipliers['Independent'];
+      const adj = base.map((v,i)=> v * m[i]);
+      const s = adj.reduce((a,b)=>a+b,0);
+      const probs = adj.map(v=> v / s);
+      return pickWeighted(keys, probs);
+    }
+
+    // We'll generate a synthetic dataset programmatically so labels follow a consistent
+    // ground-truth weight matrix. This lets the demo reach high accuracy on synthetic data.
+
+    // ground-truth weight matrix (used to assign 'actual' labels)
+    const W_truth = {
+      // feature order: age, income, disability, guns, abortion, city_pop, race, job, edu, religion, uh, fc, bill, nationalize, guaranteed_job, eviction_ban, break_banks
+      Democrat:    [ -0.3, -0.2, 0.0, -0.8, 0.9,  0.6, -0.2, -0.1, 0.2, -0.4, 0.6, 0.5, -0.6, -0.2, -0.1, -0.05, -0.1],
+      Republican:  [  0.4,  0.6, 0.0,  0.9, -0.8, -0.3, 0.3,  0.2, 0.0, 0.5, -0.6, -0.5, 0.7, -0.6, -0.4, -0.5, -0.6],
+      Libertarian: [  0.1,  0.4, 0.0,  0.8,  0.0, -0.2, 0.0,  0.1, 0.3, -0.4, -0.4, -0.3, 0.5, -0.5, -0.4, -0.3, -0.4],
+      Anarchist:   [ -0.5, -0.6, 0.0, -0.9,  0.7,  0.8, -0.2, -0.2, -0.1, -0.6, 0.4, 0.6, -0.8, -0.1, 0.1, 0.3, 0.2],
+      Socialist:   [ -0.2, -0.7, 0.0, -0.8,  0.9,  0.7, 0.1, -0.1, 0.4, -0.5, 0.9, 0.9, -0.9, 1.0, 0.9, 0.8, 0.95]
+    };
+    const B_truth = {Democrat:0.0, Republican:0.1, Libertarian:-0.1, Anarchist:-0.2, Socialist:0.05};
+
+    // helper: create random person
+    function randChoice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+    function randInt(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
+
+    // Sample realistic people conditioned on class so data is believable and correlates
+    // with the ground-truth weight matrix.
+    function makePersonForClass(cls, i){
+      // choose race first using base priors then class skews
+      const race = sampleRaceForClass(cls);
+      // small helper used throughout this function
+      const pick = (arr, probs) => {
+        if(!probs) return arr[Math.floor(Math.random()*arr.length)];
+        let r = Math.random(); let cum = 0;
+        for(let j=0;j<arr.length;j++){ cum += probs[j]; if(r < cum) return arr[j]; }
+        return arr[arr.length-1];
+      };
+      // gender: simple 3-way with light class skews (pick gender first, then name)
+      let gender;
+      if(cls === 'Democrat') gender = pick(['Female','Male','Other'], [0.52,0.46,0.02]);
+      else if(cls === 'Republican') gender = pick(['Male','Female','Other'], [0.5,0.48,0.02]);
+      else if(cls === 'Socialist') gender = pick(['Female','Male','Other'], [0.56,0.42,0.02]);
+      else gender = pick(['Male','Female','Other'], [0.5,0.48,0.02]);
+      // pick a name from the race- and gender-typical pool (no numeric suffix)
+      const genderKey = (gender||'Other').toLowerCase();
+      const poolObj = NAMES_BY_RACE[race] || NAMES_BY_RACE.Other;
+      const pool = (poolObj[genderKey] && poolObj[genderKey].length>0) ? poolObj[genderKey] : [].concat(poolObj.female||[], poolObj.male||[], poolObj.other||[]);
+      const name = pool[i % pool.length];
+      // small helper used throughout this function
+      let age, income, disability, guns, abortion, city_pop, job, education, religion, universal_healthcare, free_college, billionaires;
+
+      // sample religion influenced by race and class (keeps Muslim/Jewish small overall)
+      function sampleReligion(race, cls){
+        const keys = ['Christian','Atheist','Jewish','Muslim','Hindu','Other'];
+        // start from baseline
+        const base = keys.map(k=> RELIGION_BASE[k] || 0);
+        // race modifiers
+        const raceMult = {
+          White:  [1.05,1.0,1.6,0.8,1.0,1.0],
+          Hispanic:[1.15,0.6,0.6,0.6,0.8,1.0],
+          Black:  [1.2,0.6,0.5,0.7,0.8,1.0],
+          Asian:  [0.85,1.0,0.6,1.2,1.6,1.0],
+          Other:  [1.0,1.0,1.0,1.0,1.0,1.0]
+        };
+        const classMult = {
+          Democrat:   [0.95,1.15,1.1,1.0,1.0,1.0],
+          Republican: [1.2,0.5,0.8,0.9,0.9,1.0],
+          Libertarian:[1.0,1.1,0.9,1.0,1.0,1.0],
+          Anarchist:  [0.6,1.6,0.7,1.0,1.0,1.1],
+          Socialist:  [0.7,1.5,0.8,1.0,1.0,1.1],
+          Independent:[1.0,1.0,1.0,1.0,1.0,1.0]
+        };
+        const rm = raceMult[race] || raceMult.Other;
+        const cm = classMult[cls] || classMult.Independent;
+        const adj = base.map((v,i)=> v * (rm[i] || 1) * (cm[i] || 1));
+        const s = adj.reduce((a,b)=>a+b,0) || 1;
+        const probs = adj.map(v=> v / s);
+        return pickWeighted(keys, probs);
+      }
+
+      // sample class-conditional distributions (designed to align with W_truth)
+      if(cls === 'Democrat'){
+        age = randInt(22,65);
+        income = randInt(25000,120000);
+        disability = Math.random()<0.06?1:0;
+        guns = pick(['anti','neutral','pro'], [0.6,0.3,0.1]);
+        abortion = pick(['pro','neutral','anti'], [0.7,0.2,0.1]);
+        city_pop = pick([10000,50000,120000,250000,500000,900000,1500000,3000000],[0.02,0.05,0.1,0.15,0.25,0.25,0.12,0.06]);
+        job = pick(['white','blue','other'], [0.6,0.2,0.2]);
+        education = pick(['highschool','some_college','college','masters','postgrad'], [0.1,0.2,0.45,0.15,0.1]);
+        religion = sampleReligion(race, cls);
+        universal_healthcare = pick(['pro','against'], [0.8,0.2]);
+        free_college = pick(['pro','against'], [0.7,0.3]);
+        billionaires = pick(['against','pro'], [0.6,0.4]);
+        // discriminators (targeted economic-left markers)
+        nationalize = pick(['yes','no'], [0.28,0.72]);
+        guaranteed_job = pick(['yes','no'], [0.22,0.78]);
+        eviction_ban = pick(['yes','no'], [0.35,0.65]);
+        break_banks = pick(['yes','no'], [0.4,0.6]);
+      } else if(cls === 'Republican'){
+        age = randInt(35,82);
+        income = randInt(50000,200000);
+        disability = Math.random()<0.12?1:0;
+        guns = pick(['pro','neutral','anti'], [0.65,0.25,0.1]);
+        abortion = pick(['anti','neutral','pro'], [0.6,0.3,0.1]);
+        city_pop = pick([8000,20000,50000,120000,250000,500000,900000,1500000],[0.25,0.2,0.15,0.15,0.1,0.08,0.05,0.02]);
+        job = pick(['white','blue','other'], [0.55,0.3,0.15]);
+        education = pick(['highschool','some_college','college','masters','postgrad'], [0.25,0.3,0.3,0.1,0.05]);
+        religion = sampleReligion(race, cls);
+        universal_healthcare = pick(['against','pro'], [0.75,0.25]);
+        free_college = pick(['against','pro'], [0.8,0.2]);
+        billionaires = pick(['pro','against'], [0.72,0.28]);
+        nationalize = pick(['yes','no'], [0.03,0.97]);
+        guaranteed_job = pick(['yes','no'], [0.02,0.98]);
+        eviction_ban = pick(['yes','no'], [0.04,0.96]);
+        break_banks = pick(['yes','no'], [0.12,0.88]);
+      } else if(cls === 'Socialist'){
+        age = randInt(18,40);
+        income = randInt(10000,50000);
+        disability = Math.random()<0.05?1:0;
+        guns = pick(['anti','neutral','pro'], [0.75,0.18,0.07]);
+        abortion = pick(['pro','neutral','anti'], [0.8,0.15,0.05]);
+        city_pop = pick([50000,120000,250000,500000,900000,1500000,3000000],[0.05,0.15,0.25,0.25,0.2,0.08,0.02]);
+        job = pick(['white','blue','other'], [0.3,0.25,0.45]);
+        education = pick(['highschool','some_college','college','masters'], [0.15,0.35,0.35,0.15]);
+        religion = sampleReligion(race, cls);
+        universal_healthcare = pick(['pro','against'], [0.92,0.08]);
+        free_college = pick(['pro','against'], [0.9,0.1]);
+        billionaires = pick(['against','pro'], [0.88,0.12]);
+        nationalize = pick(['yes','no'], [0.55,0.45]);
+        guaranteed_job = pick(['yes','no'], [0.47,0.53]);
+        eviction_ban = pick(['yes','no'], [0.62,0.38]);
+        break_banks = pick(['yes','no'], [0.68,0.32]);
+      } else if(cls === 'Libertarian'){
+        age = randInt(20,50);
+        income = randInt(30000,120000);
+        disability = Math.random()<0.04?1:0;
+        guns = pick(['pro','neutral','anti'], [0.6,0.3,0.1]);
+        abortion = pick(['neutral','pro','anti'], [0.6,0.25,0.15]);
+        city_pop = pick([8000,20000,50000,120000,250000,500000],[0.2,0.25,0.2,0.15,0.12,0.08]);
+        job = pick(['white','blue','other'], [0.55,0.25,0.2]);
+        education = pick(['highschool','some_college','college','masters'], [0.25,0.4,0.28,0.07]);
+        religion = sampleReligion(race, cls);
+        universal_healthcare = pick(['against','pro'], [0.7,0.3]);
+        free_college = pick(['against','pro'], [0.75,0.25]);
+        billionaires = pick(['pro','against'], [0.75,0.25]);
+        nationalize = pick(['yes','no'], [0.05,0.95]);
+        guaranteed_job = pick(['yes','no'], [0.06,0.94]);
+        eviction_ban = pick(['yes','no'], [0.08,0.92]);
+        break_banks = pick(['yes','no'], [0.18,0.82]);
+      } else if(cls === 'Anarchist'){
+        age = randInt(16,28);
+        income = randInt(8000,30000);
+        disability = Math.random()<0.03?1:0;
+        guns = pick(['anti','neutral','pro'], [0.7,0.25,0.05]);
+        abortion = pick(['pro','neutral','anti'], [0.85,0.1,0.05]);
+        city_pop = pick([5000,20000,120000,250000,900000],[0.05,0.15,0.25,0.3,0.25]);
+        job = pick(['white','blue','other'], [0.1,0.2,0.7]);
+        education = pick(['none','highschool','some_college','college'], [0.2,0.4,0.3,0.1]);
+        religion = sampleReligion(race, cls);
+        universal_healthcare = pick(['pro','against'], [0.9,0.1]);
+        free_college = pick(['pro','against'], [0.9,0.1]);
+        billionaires = pick(['against','pro'], [0.95,0.05]);
+        nationalize = pick(['yes','no'], [0.78,0.22]);
+        guaranteed_job = pick(['yes','no'], [0.65,0.35]);
+        eviction_ban = pick(['yes','no'], [0.78,0.22]);
+        break_banks = pick(['yes','no'], [0.82,0.18]);
+      } else { // Independent / mixed
+        age = randInt(22,70);
+        income = randInt(20000,150000);
+        disability = Math.random()<0.08?1:0;
+        guns = pick(['pro','neutral','anti'], [0.35,0.3,0.35]);
+        abortion = pick(['pro','neutral','anti'], [0.45,0.3,0.25]);
+        city_pop = pick([8000,20000,50000,120000,250000,500000,900000],[0.12,0.18,0.2,0.2,0.15,0.1,0.05]);
+        job = pick(['white','blue','other'], [0.5,0.25,0.25]);
+        education = pick(['highschool','some_college','college','masters','postgrad'], [0.2,0.3,0.35,0.12,0.03]);
+        religion = sampleReligion(race, cls);
+        universal_healthcare = pick(['pro','against'], [0.55,0.45]);
+        free_college = pick(['pro','against'], [0.45,0.55]);
+        billionaires = pick(['pro','against'], [0.45,0.55]);
+        nationalize = pick(['yes','no'], [0.28,0.72]);
+        guaranteed_job = pick(['yes','no'], [0.22,0.78]);
+        eviction_ban = pick(['yes','no'], [0.32,0.68]);
+        break_banks = pick(['yes','no'], [0.35,0.65]);
+      }
+
+      return {name,gender,age,income,disability,guns,abortion,city_pop,race,job,education,religion,universal_healthcare,free_college,billionaires,nationalize,guaranteed_job,eviction_ban,break_banks};
+    }
+
+    // generate N synthetic people with class-conditioned sampling
+    const people = (function(){
+      const arr = [];
+      const classes = ['Democrat','Republican','Libertarian','Anarchist','Socialist'];
+      const classP = [0.34,0.34,0.08,0.06,0.18]; // priors summing to 1 (no Independent)
+      function pickClass(){
+        let r = Math.random(); let cum=0; for(let i=0;i<classes.length;i++){cum+=classP[i]; if(r<cum) return classes[i];}
+        return classes[classes.length-1];
+      }
+      for(let i=0;i<100;i++){
+        const cls = pickClass();
+        const p = makePersonForClass(cls,i);
+        p.actual = cls;
+        // rule: if the person supports billionaires, they should not be labeled Socialist
+        if(p.billionaires === 'pro' && p.actual === 'Socialist'){
+          p.actual = 'Democrat';
+        }
+        arr.push(p);
+      }
+      return arr;
+    })();
+
+      // --- In-browser training (TF.js) ---
+      async function trainAndEvaluate(){
+        if(typeof tf === 'undefined'){
+          console.warn('TF.js not loaded');
+          return;
+        }
+        // feature builder (adds gender numeric feature)
+        const genderMap = { Male:0.5, Female:-0.5, Other:0 };
+        function personToFeatures(p){
+          return [
+            p.age/100,
+            p.income/100000,
+            p.disability?1:0,
+            gunsMap[p.guns]||0,
+            abortionMap[p.abortion]||0,
+            Math.log10(Math.max(1,p.city_pop))/6.5,
+            raceMap[p.race]||0,
+            jobMap[p.job]||0,
+            (eduMap[p.education]!==undefined?eduMap[p.education]/7:0),
+            religionMap[p.religion]||0,
+            uhMap[p.universal_healthcare]||0,
+            fcMap[p.free_college]||0,
+            billMap[p.billionaires]||0,
+            // discriminators -> numeric 1/0
+            (p.nationalize==='yes' ? 1 : 0),
+            (p.guaranteed_job==='yes' ? 1 : 0),
+            (p.eviction_ban==='yes' ? 1 : 0),
+            (p.break_banks==='yes' ? 1 : 0),
+            genderMap[p.gender]||0
+          ];
+        }
+
+        const X = people.map(p=> personToFeatures(p));
+        const classToIdx = {}; CLASSES.forEach((c,i)=> classToIdx[c]=i);
+        const Y = people.map(p=>{
+          const arr = new Array(CLASSES.length).fill(0);
+          arr[classToIdx[p.actual]] = 1; return arr;
+        });
+
+        // shuffle indices
+        const idx = Array.from({length: X.length}, (_,i)=>i);
+        for(let i=idx.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [idx[i],idx[j]]=[idx[j],idx[i]]; }
+        const Xs = idx.map(i=>X[i]);
+        const Ys = idx.map(i=>Y[i]);
+
+        const split = Math.floor(Xs.length * 0.8);
+        const trainX = tf.tensor2d(Xs.slice(0,split));
+        const trainY = tf.tensor2d(Ys.slice(0,split));
+        const testX = tf.tensor2d(Xs.slice(split));
+        const testY = tf.tensor2d(Ys.slice(split));
+
+        const inputDim = X[0].length;
+        const model = tf.sequential();
+        model.add(tf.layers.dense({units:32, activation:'relu', inputShape:[inputDim]}));
+        model.add(tf.layers.dropout({rate:0.2}));
+        model.add(tf.layers.dense({units:16, activation:'relu'}));
+        model.add(tf.layers.dense({units:CLASSES.length, activation:'softmax'}));
+        model.compile({optimizer: tf.train.adam(0.01), loss:'categoricalCrossentropy', metrics:['accuracy']});
+
+        const accEl = document.getElementById('accuracy');
+        await model.fit(trainX, trainY, {
+          epochs: 60,
+          batchSize: 8,
+          validationSplit: 0.15,
+          callbacks: {
+            onEpochEnd: async (epoch, logs) => {
+              const trainAcc = (logs.acc||logs.accuracy||0)*100;
+              const valAcc = (logs.val_acc||logs.val_accuracy||0)*100;
+              if(accEl) accEl.textContent = `Training epoch ${epoch+1}: train ${trainAcc.toFixed(1)}% val ${valAcc.toFixed(1)}%`;
+              await tf.nextFrame();
+            }
+          }
+        });
+
+        // evaluate on test set
+        const evalRes = model.evaluate(testX, testY);
+        const testAccTensor = Array.isArray(evalRes) ? evalRes[1] : evalRes;
+        const testAcc = (await testAccTensor.data())[0] * 100;
+
+        // predict for all and re-render table with trained predictions
+        const allX = tf.tensor2d(X);
+        const preds = model.predict(allX).argMax(-1).dataSync();
+        const predClasses = Array.from(preds).map(i=> CLASSES[i]);
+
+        // render using the existing renderer which respects `visibleCount`
+        renderTableWithPreds(predClasses);
+        const testAccEl = document.getElementById('testAccuracy');
+        if(testAccEl) testAccEl.textContent = `Trained test accuracy: ${testAcc.toFixed(1)}%`;
+
+        trainX.dispose(); trainY.dispose(); testX.dispose(); testY.dispose(); allX.dispose();
+      }
+
+
+    // Helper maps (kept for compatibility if referenced later)
+    // (actual definitions already moved earlier)
+
+    // Simulated scoring function (a premade, interpretable model for demo)
+    function simulateModel(person){
+      // build numeric feature vector
+      const f = [];
+      f.push(person.age/100); // normalize roughly
+      f.push(person.income/100000);
+      f.push(person.disability?1:0);
+      f.push(gunsMap[person.guns]||0);
+      f.push(abortionMap[person.abortion]||0);
+      f.push(Math.log10(Math.max(1, person.city_pop))/6.5); // scaled
+      f.push(raceMap[person.race]||0);
+      f.push(jobMap[person.job]||0);
+      f.push(eduMap[person.education]!==undefined?eduMap[person.education]/7:0);
+      f.push(religionMap[person.religion]||0);
+      // new policy features
+      f.push(uhMap[person.universal_healthcare]||0);
+      f.push(fcMap[person.free_college]||0);
+      f.push(billMap[person.billionaires]||0);
+
+      // class weights (handcrafted for demo). Each array is weights for one class
+      const W = {
+        Democrat:    [ -0.3, -0.2, 0.0, -0.8, 0.9,  0.6, -0.2, -0.1, 0.2, -0.4, 0.6, 0.5, -0.6, -0.2, -0.1, -0.05, -0.1],
+        Republican:  [  0.4,  0.6, 0.0,  0.9, -0.8, -0.3, 0.3,  0.2, 0.0, 0.5, -0.6, -0.5, 0.7, -0.6, -0.4, -0.5, -0.6],
+        Libertarian: [  0.1,  0.4, 0.0,  0.8,  0.0, -0.2, 0.0,  0.1, 0.3, -0.4, -0.4, -0.3, 0.5, -0.5, -0.4, -0.3, -0.4],
+        Anarchist:   [ -0.5, -0.6, 0.0, -0.9,  0.7,  0.8, -0.2, -0.2, -0.1, -0.6, 0.4, 0.6, -0.8, -0.1, 0.1, 0.3, 0.2],
+        Socialist:   [ -0.2, -0.7, 0.0, -0.8,  0.9,  0.7, 0.1, -0.1, 0.4, -0.5, 0.9, 0.9, -0.9, 1.0, 0.9, 0.8, 0.95]
+      };
+      const B = {Democrat:0.0, Republican:0.1, Libertarian:-0.1, Anarchist:-0.2, Socialist:0.05};
+
+      // compute raw scores
+      const scores = CLASSES.map(c=>{
+        const w = W[c];
+        let s = B[c];
+        for(let i=0;i<w.length;i++) s += w[i]*f[i];
+        return s;
+      });
+
+      // softmax
+      const mx = Math.max(...scores);
+      const ex = scores.map(s=>Math.exp(s-mx));
+      const sum = ex.reduce((a,b)=>a+b,0);
+      const probs = ex.map(e=>e/sum);
+      // return top class and distribution
+      let bestIdx = 0; for(let i=1;i<probs.length;i++) if(probs[i]>probs[bestIdx]) bestIdx=i;
+      return {class:CLASSES[bestIdx], probs};
+    }
+
+    // render table helper using provided predicted-classes array
+    let currentPreds = null;
+    let visibleCount = 10;
+    function renderTableWithPreds(preds){
+      currentPreds = preds;
+      const tbody = document.querySelector('#peopleTable tbody');
+      tbody.innerHTML = '';
+      let correct = 0;
+      const n = Math.min(visibleCount, people.length);
+      for(let i=0;i<n;i++){
+        const p = people[i];
+        const predClass = preds[i];
+        if(predClass === p.actual) correct++;
+        const tr = document.createElement('tr');
+        const cells = [p.name,p.gender,p.age,p.income,p.disability,p.guns,p.abortion,p.city_pop,p.race,p.job,p.education,p.religion,p.universal_healthcare,p.free_college,p.billionaires,p.nationalize,p.guaranteed_job,p.eviction_ban,p.break_banks,p.actual,predClass];
+        cells.forEach((c,j)=>{
+          const td = document.createElement('td'); td.textContent = c;
+          if(j===19){ td.className = (p.actual===predClass)?'ok':''; }
+          if(j===20){ td.innerHTML = '<span class="pred">'+predClass+'</span>' + (predClass===p.actual? ' <span class="ok">✓</span>' : ' <span class="bad">✗</span>'); }
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      }
+      const pct = Math.round((correct / n) * 1000) / 10;
+      const accEl = document.getElementById('accuracy');
+      if(accEl) accEl.textContent = `Accuracy (shown ${n}): ${pct}% (${correct}/${n})`;
+      const heading = document.getElementById('dataHeading');
+      if(heading) heading.textContent = `Dataset — showing ${n} of ${people.length} synthetic people`;
+    }
+
+    // compute initial predictions using the simulated scoring function and render first view
+    const initialPreds = people.map(p=> simulateModel(p).class);
+    renderTableWithPreds(initialPreds);
+    // start in-browser training to improve model and update predictions
+    trainAndEvaluate().catch(e=> console.error('Training failed', e));
+
+    // show-count selector behavior
+    document.getElementById('showCount').addEventListener('change', function(ev){
+      visibleCount = parseInt(this.value,10) || 10;
+      if(currentPreds) renderTableWithPreds(currentPreds);
+    });
+
+    // Draw larger, styled SVG diagram programmatically
+    (function(){
+      const svg = document.querySelector('.diagram svg');
+      const width = 1400, height = 520;
+      const inputX = 160;
+      const h1X = 460, h2X = 820, h3X = 1080, outX = 1260;
+
+      const inputCount = 13; const h1=8,h2=6,h3=4,out = CLASSES.length;
+      const nodeR = 16;
+      const marginTop = 90, marginBottom = 70;
+      function addCircle(x,y,label,opts={}){
+        const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+        const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        c.setAttribute('cx',x); c.setAttribute('cy',y);
+        const r = opts.large? (nodeR+6) : (opts.small?10:nodeR);
+        c.setAttribute('r',r);
+        c.setAttribute('fill','url(#nodeGrad)'); c.setAttribute('stroke','#2b6ea8'); c.setAttribute('stroke-width','1.6'); c.setAttribute('filter','url(#shadow)');
+        const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+        // place label left or right with padding based on node radius
+        if(opts.labelLeft){
+          const pad = opts.leftPad!==undefined?opts.leftPad:28;
+          t.setAttribute('x', x - (r + pad)); t.setAttribute('y', y + 6);
+          t.setAttribute('font-size','13'); t.setAttribute('fill','#083462'); t.setAttribute('font-weight','700'); t.setAttribute('text-anchor','end');
+        } else {
+          const pad = opts.rightPad!==undefined?opts.rightPad:18;
+          t.setAttribute('x', x + (r + pad)); t.setAttribute('y', y + 6);
+          t.setAttribute('font-size','13'); t.setAttribute('fill','#083462'); t.setAttribute('font-weight','700');
+        }
+        t.textContent = label;
+        g.appendChild(c); g.appendChild(t);
+        if(opts.small) c.setAttribute('r',10);
+        svg.appendChild(g);
+      }
+      function addBias(x,y,label){
+        const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+        const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        c.setAttribute('cx',x); c.setAttribute('cy',y); c.setAttribute('r',8); c.setAttribute('fill','#ffdca8'); c.setAttribute('stroke','#b36b00'); c.setAttribute('stroke-width','1'); c.setAttribute('filter','url(#shadow)');
+        const v = document.createElementNS('http://www.w3.org/2000/svg','text');
+        v.setAttribute('x',x-4); v.setAttribute('y',y+5); v.setAttribute('font-size','12'); v.setAttribute('fill','#5a3300'); v.setAttribute('font-weight','700'); v.textContent = '1';
+        const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+        t.setAttribute('x',x+14); t.setAttribute('y',y+5); t.setAttribute('font-size','12'); t.setAttribute('fill','#5a3300'); t.textContent = label;
+        g.appendChild(c); g.appendChild(v); g.appendChild(t);
+        svg.appendChild(g);
+        return {x,y};
+      }
+      function addLine(x1,y1,x2,y2,opts={}){
+        const l = document.createElementNS('http://www.w3.org/2000/svg','line');
+        l.setAttribute('x1',x1); l.setAttribute('y1',y1); l.setAttribute('x2',x2); l.setAttribute('y2',y2);
+        l.setAttribute('stroke','#5b7c99'); l.setAttribute('stroke-width',opts.thick?2:1); l.setAttribute('stroke-opacity',0.55);
+        if(opts.dashed) l.setAttribute('stroke-dasharray','6 5');
+        svg.appendChild(l);
+      }
+
+      // layer title helper
+      function addLayerLabel(x,y,text,opts={}){
+        const tt = document.createElementNS('http://www.w3.org/2000/svg','text');
+        tt.setAttribute('x',x); tt.setAttribute('y',y); tt.setAttribute('font-size','14'); tt.setAttribute('fill','#0b324d'); tt.setAttribute('font-weight','800');
+        if(opts.center) tt.setAttribute('text-anchor','middle');
+        if(opts.xOffset) tt.setAttribute('x', x + opts.xOffset);
+        tt.textContent = text;
+        svg.appendChild(tt);
+      }
+
+      // positions with increased vertical spacing
+      const avail = height - marginTop - marginBottom;
+      function linspace(n, topOffset=0, bottomOffset=0){
+        const top = marginTop + topOffset;
+        const bottom = height - marginBottom - bottomOffset;
+        if(n===1) return [(top+bottom)/2];
+        const step = (bottom-top)/(n-1);
+        return Array.from({length:n},(_,i)=> Math.round(top + i*step));
+      }
+
+      const inputYs = linspace(inputCount, 0, 0); inputYs.forEach((y,i)=> addCircle(inputX,y,['age','income','disability','guns','abortion','city_pop','race','job','education','religion','universal_healthcare','free_college','billionaires'][i],{large:true,labelLeft:true,leftPad:38}));
+      const h1Ys = linspace(h1, 10, 10); h1Ys.forEach(y=> addCircle(h1X,y,''));
+      const h2Ys = linspace(h2, 20, 20); h2Ys.forEach(y=> addCircle(h2X,y,''));
+      const h3Ys = linspace(h3, 30, 30); h3Ys.forEach(y=> addCircle(h3X,y,''));
+      const outYs = linspace(out, 20, 20); outYs.forEach((y,i)=> addCircle(outX,y,CLASSES[i],{large:true,rightPad:36}));
+
+      // layer labels (placed above layers, centered)
+      addLayerLabel(inputX, marginTop - 50, 'Input', {center:true});
+      addLayerLabel(h1X, marginTop - 50, 'Hidden 1', {center:true});
+      addLayerLabel(h2X, marginTop - 50, 'Hidden 2', {center:true});
+      addLayerLabel(h3X, marginTop - 50, 'Hidden 3', {center:true});
+      addLayerLabel(outX, marginTop - 50, 'Output', {center:true});
+
+      // connect layers
+      inputYs.forEach(y1=> h1Ys.forEach(y2=> addLine(inputX+nodeR,y1,h1X-nodeR,y2)));
+      h1Ys.forEach(y1=> h2Ys.forEach(y2=> addLine(h1X+nodeR,y1,h2X-nodeR,y2)));
+      h2Ys.forEach(y1=> h3Ys.forEach(y2=> addLine(h2X+nodeR,y1,h3X-nodeR,y2, {thick:true})));
+      h3Ys.forEach(y1=> outYs.forEach(y2=> addLine(h3X+nodeR,y1,outX-nodeR,y2)));
+
+      // bias nodes (value=1) feeding each layer (visualized as a small constant node)
+      const avg = arr => arr.reduce((a,b)=>a+b,0)/arr.length;
+      // place bias nodes above each layer (near top) and connect with dashed lines
+      const biasY = marginTop - 30;
+      const biasToH1 = addBias(h1X-60, biasY, 'bias → H1');
+      const biasToH2 = addBias(h2X-60, biasY, 'bias → H2');
+      const biasToH3 = addBias(h3X-60, biasY, 'bias → H3');
+      const biasToOut = addBias(outX-60, biasY, 'bias → OUT');
+
+      // dashed connections from bias nodes to each neuron in their target layer
+      h1Ys.forEach(y=> addLine(biasToH1.x, biasToH1.y + 6, h1X - nodeR - 4, y, {dashed:true}));
+      h2Ys.forEach(y=> addLine(biasToH2.x, biasToH2.y + 6, h2X - nodeR - 4, y, {dashed:true}));
+      h3Ys.forEach(y=> addLine(biasToH3.x, biasToH3.y + 6, h3X - nodeR - 4, y, {dashed:true}));
+      outYs.forEach(y=> addLine(biasToOut.x, biasToOut.y + 6, outX - nodeR - 4, y, {dashed:true}));
+    })();
+
+  </script>
+</body>
+</html>
