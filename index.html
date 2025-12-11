@@ -5,45 +5,55 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Neural Network Demo — Political Affiliation (Synthetic)</title>
   <style>
-    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;max-width:1000px;margin:24px auto;padding:0 16px;color:#111}
-    table{border-collapse:collapse;width:100%;margin-top:12px}
-    th,td{border:1px solid #ddd;padding:8px;text-align:left}
-    th{background:#f4f4f4}
-    .diagram{width:100%;height:560px;background:#fff;border:1px solid #eee;margin-top:12px}
+    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;max-width:1600px;margin:20px auto;padding:12px 20px;color:#0f1720;background:linear-gradient(180deg,#fbfdff,#f3f8ff)}
+    h1{font-size:28px;margin-bottom:6px;color:#05263a}
+    h2{color:#063a57}
+    .card{background:white;border-radius:12px;padding:16px;margin-top:12px;box-shadow:0 8px 24px rgba(12,37,64,0.06)}
+    table{border-collapse:collapse;width:100%;margin-top:12px;background:white}
+    th,td{border:1px solid #e6eef7;padding:10px;text-align:left;font-size:15px}
+    th{background:#f7fbff;color:#063a57}
+    .diagram{width:100%;height:760px;background:#fff;border:1px solid #eef;margin-top:12px;border-radius:8px;padding:6px;overflow:hidden}
     .badge{display:inline-block;padding:4px 8px;border-radius:12px;background:#eef}
     .pred{font-weight:600}
     .ok{color:green}
     .bad{color:red}
-    .note{font-size:0.95em;color:#333}
+    .note{font-size:0.98em;color:#1b2b38}
     pre{background:#f7f7f7;padding:8px;border-radius:4px;overflow:auto}
   </style>
 </head>
 <body>
   <h1>Neural Network Demo — Political Affiliation (Synthetic)</h1>
 
-  <p class="note">This is an educational demo using fully synthetic people and a simulated, premade model. Do not use for real profiling.</p>
+  <p class="note">For testing purposes and to show how neural networks might be used in real-life applications, this is an educational demo using fully synthetic people and a simulated, premade model. Do not use for real profiling.</p>
 
   <h2>What we'll show</h2>
   <ul>
-    <li>Synthetic dataset: 10 people with realistic-sounding attributes</li>
-    <li>A simple explanation of what hidden layers do (plain language)</li>
-    <li>An illustrative network diagram (input → 3 hidden layers → output)</li>
-    <li>Premade simulated predictions (no training yet) compared to the actual labels</li>
+    <li>Synthetic dataset: 100 synthetic people with realistic-sounding attributes</li>
+    <li>An explanation of what hidden layers do</li>
+    <li>An illustrative network diagram (inputs → hidden layers → outputs)</li>
+    <li>Premade simulated predictions and trained-model predictions compared to the actual labels</li>
   </ul>
 
-  <h2>Inputs / features used</h2>
-  <p class="note">Using these features: <strong>age</strong>, <strong>income</strong>, <strong>disability</strong> (0/1), <strong>guns</strong> (pro/neutral/anti), <strong>abortion</strong> (pro/neutral/anti), <strong>city_population</strong>, <strong>race</strong>, <strong>job_type</strong>, <strong>education</strong>, <strong>religion</strong>, <strong>universal_healthcare</strong> (pro/against), <strong>free_college</strong> (pro/against), <strong>billionaires_support</strong> (pro/against).</p>
+  <h2>How inputs are used in neural networks</h2>
+  <p class="note">Each person is converted into a numeric feature vector. Continuous fields (age, income, population) are scaled or normalized; categorical fields (race, job, religion, stance choices) are encoded as one-hot vectors or small numeric embeddings. Those input features form the vector X that the network consumes: each layer computes weighted sums of its inputs, applies an activation function (e.g. ReLU, sigmoid), and passes results forward. The legend above the diagram maps X1…Xn to the human-readable features.</p>
 
-  <h2>Quick plain-language: what do hidden layers do?</h2>
-  <p class="note">Think of the network as a sequence of processing steps. The input layer reads raw features (age, income, etc.). Each hidden layer transforms those numbers into new signals that highlight patterns. Early hidden layers find simple patterns ("likes guns and high income"), middle layers combine those into higher-level cues ("likely fiscally conservative"), and later hidden layers combine cues into a final opinion signal used by the output layer to pick a class. Hidden layers let the model learn non-linear rules and combine many simple features into complex concepts.</p>
+  <h2>Hidden layers: what they do</h2>
+  <p class="note">Hidden layers transform raw input values into progressively more abstract signals. Early layers detect simple combinations (e.g. "pro-guns + high income"), middle layers combine those into broader concepts (e.g. "fiscally conservative"), and later layers mix concepts to produce class logits. Non-linear activations let the model represent complex decision boundaries; during training the network adjusts its weights via backpropagation and gradient descent to minimise a loss (e.g. cross-entropy). The final layer converts logits into probabilities (softmax) and the top probability yields the predicted class.</p>
 
   <h2>Illustrative network architecture</h2>
   <div id="accuracy" style="font-weight:700;margin-bottom:8px">Accuracy: —</div>
   <div id="error" style="color:#a00;font-weight:700;margin-bottom:8px"></div>
   <div id="testAccuracy" style="font-weight:600;margin-bottom:8px;color:#333"></div>
-  <div class="diagram">
+  <div class="diagram card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:13px;color:#083462;font-weight:700">Inputs legend</div>
+      <button id="toggleLegend" style="background:#e6f2ff;border:1px solid #cfe8ff;padding:6px 10px;border-radius:8px;color:#053a63;cursor:pointer">Show inputs (X1…X18)</button>
+    </div>
+    <div id="inputLegend" style="display:none;max-height:140px;overflow:auto;padding:8px 10px;margin-bottom:8px;border-radius:8px;background:#fbfdff;border:1px solid #eef;">
+      <!-- populated by script: X1: Age, X2: Income ... -->
+    </div>
     <!-- Larger, styled SVG showing 10 inputs, 3 hidden layers (8,6,4), 6 outputs -->
-    <svg viewBox="0 0 1400 520" preserveAspectRatio="xMidYMid meet" style="width:100%;height:520px">
+    <svg id="networkSvg" viewBox="0 0 2000 760" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%">
       <defs>
         <linearGradient id="nodeGrad" x1="0" x2="1">
           <stop offset="0%" stop-color="#e6f2ff" />
@@ -53,8 +63,8 @@
           <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.15" />
         </filter>
       </defs>
-      <!-- background panel -->
-      <rect x="6" y="6" width="1388" height="508" rx="10" fill="#fbfdff" stroke="#eef3fb"></rect>
+      <!-- background panel covering full diagram -->
+      <rect x="6" y="6" width="1988" height="748" rx="12" fill="#fbfdff" stroke="#eef3fb"></rect>
       <!-- draw nodes via JS after load -->
     </svg>
   </div>
@@ -73,7 +83,27 @@
   <table id="peopleTable">
     <thead>
       <tr>
-        <th>Name</th><th>Gender</th><th>Age</th><th>Income</th><th>Disability</th><th>Guns</th><th>Abortion</th><th>City Pop</th><th>Race</th><th>Job</th><th>Education</th><th>Religion</th><th>Universal HC</th><th>Free College</th><th>Billionaires</th><th>Nationalize</th><th>Guaranteed Job</th><th>Eviction Ban</th><th>Break Banks</th><th>Actual</th><th>Predicted</th>
+        <th>Name</th>
+        <th>Gender</th>
+        <th>Age</th>
+        <th>Income (USD)</th>
+        <th>Disability (0/1)</th>
+        <th>Guns stance (pro/neutral/anti)</th>
+        <th>Abortion stance (pro/neutral/anti)</th>
+        <th>City population</th>
+        <th>Race</th>
+        <th>Job type</th>
+        <th>Education level</th>
+        <th>Religion</th>
+        <th>Support universal healthcare?</th>
+        <th>Support free college?</th>
+        <th>Support billionaires?</th>
+        <th>Support government nationalization of large companies/banks/utilities?</th>
+        <th>Support guaranteed jobs?</th>
+        <th>Support eviction ban?</th>
+        <th>Support breaking banks?</th>
+        <th>Actual affiliation</th>
+        <th>Predicted affiliation</th>
       </tr>
     </thead>
     <tbody>
@@ -81,8 +111,39 @@
   </table>
   </div>
 
-  <h3>How predictions are produced (now)</h3>
-  <p class="note">For this step we use a premade, deterministic scoring function (a stand-in for a trained network) to compute a probability over 6 classes and pick the top one. Later we'll implement interactive training and visualization.</p>
+  <div class="card" style="margin-top:12px;padding:12px" id="manualInputCard">
+    <button id="openManualBtn" style="background:#0b6fb5;color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer">Add manual input</button>
+    <div id="manualForm" style="display:none;margin-top:12px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;align-items:center">
+        <label>Name<input id="m_name" type="text" placeholder="Optional" style="width:100%"></label>
+        <label>Gender<select id="m_gender"><option>Male</option><option>Female</option><option>Other</option></select></label>
+        <label>Age<input id="m_age" type="number" min="0" max="120" value="30" style="width:100%"></label>
+        <label>Income<input id="m_income" type="number" min="0" value="40000" style="width:100%"></label>
+        <label>Disability<select id="m_disability"><option value="0">0</option><option value="1">1</option></select></label>
+        <label>City population<input id="m_city_pop" type="number" min="0" value="50000" style="width:100%"></label>
+        <label>Guns stance<select id="m_guns"><option value="pro">pro</option><option value="neutral">neutral</option><option value="anti">anti</option></select></label>
+        <label>Abortion stance<select id="m_abortion"><option value="pro">pro</option><option value="neutral">neutral</option><option value="anti">anti</option></select></label>
+        <label>Race<select id="m_race"><option>White</option><option>Hispanic</option><option>Black</option><option>Asian</option><option>Other</option></select></label>
+        <label>Job type<select id="m_job"><option value="white">white</option><option value="blue">blue</option><option value="other">other</option></select></label>
+        <label>Education<select id="m_education"><option value="highschool">highschool</option><option value="some_college">some_college</option><option value="college">college</option><option value="masters">masters</option><option value="postgrad">postgrad</option></select></label>
+        <label>Religion<select id="m_religion"><option>Christian</option><option>Atheist</option><option>Jewish</option><option>Muslim</option><option>Hindu</option><option>Other</option></select></label>
+        <label>Support universal healthcare?<select id="m_uh"><option value="pro">pro</option><option value="against">against</option></select></label>
+        <label>Support free college?<select id="m_fc"><option value="pro">pro</option><option value="against">against</option></select></label>
+        <label>Support billionaires?<select id="m_bill"><option value="pro">pro</option><option value="against">against</option></select></label>
+        <label>Support government nationalization of large companies/banks/utilities?<select id="m_nationalize"><option value="yes">yes</option><option value="no">no</option></select></label>
+        <label>Support guaranteed jobs?<select id="m_guaranteed_job"><option value="yes">yes</option><option value="no">no</option></select></label>
+        <label>Support eviction ban?<select id="m_eviction_ban"><option value="yes">yes</option><option value="no">no</option></select></label>
+        <label>Support breaking banks?<select id="m_break_banks"><option value="yes">yes</option><option value="no">no</option></select></label>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button id="m_submit" style="background:#0b6fb5;color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer">Run through network</button>
+        <button id="m_cancel" style="background:#eee;border:1px solid #ddd;padding:8px 12px;border-radius:8px;cursor:pointer">Cancel</button>
+      </div>
+      <div id="m_result" style="margin-top:10px;font-weight:700"></div>
+    </div>
+  </div>
+
+  
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.8.0/dist/tf.min.js"></script>
   <script>
@@ -115,34 +176,72 @@
     // US-like race priors (approximate, for synthetic data realism)
     const RACE_PRIOR = { White:0.61, Hispanic:0.18, Black:0.12, Asian:0.06, Other:0.03 };
 
-    // name pools by broad group (used to create believable, group-typical names)
-    const NAMES_BY_RACE = {
+    // richer first/last name pools to create many more unique combinations
+    const FIRST_NAMES_BY_RACE = {
       White: {
-        female: ['Emma Johnson','Olivia Miller','Ava Wilson','Sophia Taylor','Isabella Thomas','Mia White'],
-        male: ['Liam Brown','Noah Davis','William Moore','James Anderson','Benjamin Jackson','Lucas Harris'],
-        other: ['Taylor Morgan','Alex Rivera']
+        female: ['Emma','Olivia','Ava','Sophia','Isabella','Mia','Charlotte','Amelia','Harper','Evelyn','Abigail','Emily'],
+        male: ['Liam','Noah','William','James','Benjamin','Lucas','Henry','Alexander','Michael','Daniel','Matthew','Jackson'],
+        other: ['Taylor','Alex','Jordan','Casey']
       },
       Hispanic: {
-        female: ['Sofia Garcia','Isabella Rodriguez','Camila Hernandez','Valentina Perez','Lucia Torres'],
-        male: ['Mateo Martinez','Sebastian Lopez','Diego Gonzalez','Jose Ramirez'],
-        other: []
+        female: ['Sofia','Isabella','Camila','Valentina','Lucia','Gabriela','Mariana','Ana'],
+        male: ['Mateo','Sebastian','Diego','Jose','Luis','Carlos','Angel','Juan'],
+        other: ['Alex','Cruz']
       },
       Black: {
-        female: ['Aaliyah Robinson','Imani Brooks','Nia Young','Zoe Scott'],
-        male: ['Malik Walker','Jalen Harris','Elijah King','Darnell Green'],
-        other: []
+        female: ['Aaliyah','Imani','Nia','Zoe','Ariana','Brielle','Keisha','Jada'],
+        male: ['Malik','Jalen','Elijah','Darnell','Trevon','DeAndre','Marquis','Kendrick'],
+        other: ['Taylor','Jordan']
       },
       Asian: {
-        female: ['Maya Patel','Sofia Chen','Asha Kumar','Isabella Kim'],
-        male: ['Arjun Singh','Liam Nguyen','Ethan Lee'],
-        other: []
+        female: ['Maya','Sofia','Asha','Isabella','Li','Mei','Yuna','Hana'],
+        male: ['Arjun','Liam','Ethan','Kai','Hiro','Min','Jun','Kenji'],
+        other: ['Alex','Sam']
       },
       Other: {
-        female: ['Jordan Lee','Casey Brooks'],
-        male: ['Alex Rivera'],
-        other: []
+        female: ['Jordan','Casey','Morgan','Riley'],
+        male: ['Alex','River','Skyler','Rowan'],
+        other: ['Avery']
       }
     };
+    const LAST_NAMES_BY_RACE = {
+      White: ['Johnson','Miller','Wilson','Taylor','Thomas','White','Brown','Davis','Moore','Anderson','Jackson','Harris','Martin','Thompson'],
+      Hispanic: ['Garcia','Rodriguez','Hernandez','Perez','Torres','Martinez','Lopez','Gonzalez','Ramirez','Sanchez'],
+      Black: ['Robinson','Brooks','Young','Scott','Walker','Harris','King','Green','Carter','Parker'],
+      Asian: ['Patel','Chen','Kumar','Kim','Singh','Nguyen','Lee','Wong','Park','Yamamoto'],
+      Other: ['Rivera','Morgan','Lee','Brooks','Reed','Bailey']
+    };
+    const usedNames = new Set();
+
+    // input labels used in the network diagram and legend (X1..Xn)
+    const INPUT_LABELS = ['Age','Income (USD)','Disability','Guns stance','Abortion stance','City population','Race','Job type','Education level','Religion','Support universal healthcare?','Support free college?','Support billionaires?','Support nationalization? (favor public ownership of major industries/utilities)','Support guaranteed jobs?','Support eviction ban?','Support breaking banks?','Gender'];
+
+    // gender map for feature encoding (global so manual input can use it)
+    const GENDER_MAP = { Male:0.5, Female:-0.5, Other:0 };
+
+    // global feature builder used by training and manual inputs
+    function personToFeatures(p){
+      return [
+        p.age/100,
+        p.income/100000,
+        p.disability?1:0,
+        gunsMap[p.guns]||0,
+        abortionMap[p.abortion]||0,
+        Math.log10(Math.max(1,p.city_pop))/6.5,
+        raceMap[p.race]||0,
+        jobMap[p.job]||0,
+        (eduMap[p.education]!==undefined?eduMap[p.education]/7:0),
+        religionMap[p.religion]||0,
+        uhMap[p.universal_healthcare]||0,
+        fcMap[p.free_college]||0,
+        billMap[p.billionaires]||0,
+        (p.nationalize==='yes' ? 1 : 0),
+        (p.guaranteed_job==='yes' ? 1 : 0),
+        (p.eviction_ban==='yes' ? 1 : 0),
+        (p.break_banks==='yes' ? 1 : 0),
+        GENDER_MAP[p.gender]||0
+      ];
+    }
 
     // baseline religion priors (approximate US-like mix)
     const RELIGION_BASE = { Christian:0.63, Atheist:0.22, Jewish:0.02, Muslim:0.01, Hindu:0.01, Other:0.11 };
@@ -204,11 +303,19 @@
       else if(cls === 'Republican') gender = pick(['Male','Female','Other'], [0.5,0.48,0.02]);
       else if(cls === 'Socialist') gender = pick(['Female','Male','Other'], [0.56,0.42,0.02]);
       else gender = pick(['Male','Female','Other'], [0.5,0.48,0.02]);
-      // pick a name from the race- and gender-typical pool (no numeric suffix)
+      // build a more unique name by combining first + last pools, avoid repeats
       const genderKey = (gender||'Other').toLowerCase();
-      const poolObj = NAMES_BY_RACE[race] || NAMES_BY_RACE.Other;
-      const pool = (poolObj[genderKey] && poolObj[genderKey].length>0) ? poolObj[genderKey] : [].concat(poolObj.female||[], poolObj.male||[], poolObj.other||[]);
-      const name = pool[i % pool.length];
+      const firstPool = (FIRST_NAMES_BY_RACE[race] && FIRST_NAMES_BY_RACE[race][genderKey] && FIRST_NAMES_BY_RACE[race][genderKey].length>0) ? FIRST_NAMES_BY_RACE[race][genderKey] : (FIRST_NAMES_BY_RACE[race] ? [].concat(FIRST_NAMES_BY_RACE[race].female||[], FIRST_NAMES_BY_RACE[race].male||[], FIRST_NAMES_BY_RACE[race].other||[]) : [].concat(FIRST_NAMES_BY_RACE.White.female, FIRST_NAMES_BY_RACE.White.male));
+      const lastPool = LAST_NAMES_BY_RACE[race] || LAST_NAMES_BY_RACE.White;
+      let name = '';
+      let tries = 0;
+      do{
+        const first = randChoice(firstPool);
+        const last = randChoice(lastPool);
+        name = first + ' ' + last;
+        tries++;
+      } while(usedNames.has(name) && tries < 8);
+      usedNames.add(name);
       // small helper used throughout this function
       let age, income, disability, guns, abortion, city_pop, job, education, religion, universal_healthcare, free_college, billionaires;
 
@@ -244,7 +351,7 @@
       // sample class-conditional distributions (designed to align with W_truth)
       if(cls === 'Democrat'){
         age = randInt(22,65);
-        income = randInt(25000,120000);
+        income = randInt(0,120000);
         disability = Math.random()<0.06?1:0;
         guns = pick(['anti','neutral','pro'], [0.6,0.3,0.1]);
         abortion = pick(['pro','neutral','anti'], [0.7,0.2,0.1]);
@@ -262,7 +369,7 @@
         break_banks = pick(['yes','no'], [0.4,0.6]);
       } else if(cls === 'Republican'){
         age = randInt(35,82);
-        income = randInt(50000,200000);
+        income = randInt(15000,200000);
         disability = Math.random()<0.12?1:0;
         guns = pick(['pro','neutral','anti'], [0.65,0.25,0.1]);
         abortion = pick(['anti','neutral','pro'], [0.6,0.3,0.1]);
@@ -279,7 +386,7 @@
         break_banks = pick(['yes','no'], [0.12,0.88]);
       } else if(cls === 'Socialist'){
         age = randInt(18,40);
-        income = randInt(10000,50000);
+        income = randInt(0,50000);
         disability = Math.random()<0.05?1:0;
         guns = pick(['anti','neutral','pro'], [0.75,0.18,0.07]);
         abortion = pick(['pro','neutral','anti'], [0.8,0.15,0.05]);
@@ -296,7 +403,7 @@
         break_banks = pick(['yes','no'], [0.68,0.32]);
       } else if(cls === 'Libertarian'){
         age = randInt(20,50);
-        income = randInt(30000,120000);
+        income = randInt(0,120000);
         disability = Math.random()<0.04?1:0;
         guns = pick(['pro','neutral','anti'], [0.6,0.3,0.1]);
         abortion = pick(['neutral','pro','anti'], [0.6,0.25,0.15]);
@@ -313,7 +420,7 @@
         break_banks = pick(['yes','no'], [0.18,0.82]);
       } else if(cls === 'Anarchist'){
         age = randInt(16,28);
-        income = randInt(8000,30000);
+        income = randInt(0,40000);
         disability = Math.random()<0.03?1:0;
         guns = pick(['anti','neutral','pro'], [0.7,0.25,0.05]);
         abortion = pick(['pro','neutral','anti'], [0.85,0.1,0.05]);
@@ -330,7 +437,7 @@
         break_banks = pick(['yes','no'], [0.82,0.18]);
       } else { // Independent / mixed
         age = randInt(22,70);
-        income = randInt(20000,150000);
+        income = randInt(0,150000);
         disability = Math.random()<0.08?1:0;
         guns = pick(['pro','neutral','anti'], [0.35,0.3,0.35]);
         abortion = pick(['pro','neutral','anti'], [0.45,0.3,0.25]);
@@ -347,6 +454,10 @@
         break_banks = pick(['yes','no'], [0.35,0.65]);
       }
 
+      // small chance of very low / zero income across the population to increase realism
+      if(Math.random() < 0.03){
+        if(Math.random() < 0.6) income = 0; else income = Math.min(income, randInt(0,8000));
+      }
       return {name,gender,age,income,disability,guns,abortion,city_pop,race,job,education,religion,universal_healthcare,free_college,billionaires,nationalize,guaranteed_job,eviction_ban,break_banks};
     }
 
@@ -378,31 +489,7 @@
           console.warn('TF.js not loaded');
           return;
         }
-        // feature builder (adds gender numeric feature)
-        const genderMap = { Male:0.5, Female:-0.5, Other:0 };
-        function personToFeatures(p){
-          return [
-            p.age/100,
-            p.income/100000,
-            p.disability?1:0,
-            gunsMap[p.guns]||0,
-            abortionMap[p.abortion]||0,
-            Math.log10(Math.max(1,p.city_pop))/6.5,
-            raceMap[p.race]||0,
-            jobMap[p.job]||0,
-            (eduMap[p.education]!==undefined?eduMap[p.education]/7:0),
-            religionMap[p.religion]||0,
-            uhMap[p.universal_healthcare]||0,
-            fcMap[p.free_college]||0,
-            billMap[p.billionaires]||0,
-            // discriminators -> numeric 1/0
-            (p.nationalize==='yes' ? 1 : 0),
-            (p.guaranteed_job==='yes' ? 1 : 0),
-            (p.eviction_ban==='yes' ? 1 : 0),
-            (p.break_banks==='yes' ? 1 : 0),
-            genderMap[p.gender]||0
-          ];
-        }
+        // use the shared global personToFeatures defined earlier
 
         const X = people.map(p=> personToFeatures(p));
         const classToIdx = {}; CLASSES.forEach((c,i)=> classToIdx[c]=i);
@@ -445,6 +532,9 @@
             }
           }
         });
+
+        // keep the trained model available globally for manual predictions
+        try{ window.trainedModel = model; window.trainedModelReady = true; }catch(e){ console.warn('Could not expose trained model globally', e); }
 
         // evaluate on test set
         const evalRes = model.evaluate(testX, testY);
@@ -551,22 +641,105 @@
     // start in-browser training to improve model and update predictions
     trainAndEvaluate().catch(e=> console.error('Training failed', e));
 
+    // render the input legend (X1..Xn) and wire toggle button
+    (function(){
+      const legendWrap = document.getElementById('inputLegend');
+      const btn = document.getElementById('toggleLegend');
+      if(!legendWrap || !btn) return;
+      function buildLegend(){
+        legendWrap.innerHTML = '';
+        const ul = document.createElement('div'); ul.style.display='grid'; ul.style.gridTemplateColumns='repeat(2,1fr)'; ul.style.gap='6px 12px';
+        INPUT_LABELS.forEach((lab,i)=>{
+          const d = document.createElement('div'); d.style.fontSize='13px'; d.style.color='#063a57'; d.textContent = 'X' + (i+1) + ': ' + lab; ul.appendChild(d);
+        });
+        legendWrap.appendChild(ul);
+      }
+      buildLegend();
+      btn.addEventListener('click', ()=>{
+        if(legendWrap.style.display === 'none' || legendWrap.style.display === ''){
+          legendWrap.style.display = 'block'; btn.textContent = 'Hide inputs';
+        } else { legendWrap.style.display = 'none'; btn.textContent = 'Show inputs (X1…X18)'; }
+      });
+    })();
+
     // show-count selector behavior
     document.getElementById('showCount').addEventListener('change', function(ev){
       visibleCount = parseInt(this.value,10) || 10;
       if(currentPreds) renderTableWithPreds(currentPreds);
     });
 
+    // Manual input UI wiring
+    document.getElementById('openManualBtn').addEventListener('click', ()=>{
+      const f = document.getElementById('manualForm'); if(!f) return; f.style.display = (f.style.display==='none' || f.style.display==='') ? 'block' : 'none';
+    });
+    document.getElementById('m_cancel').addEventListener('click', ()=>{ document.getElementById('manualForm').style.display='none'; document.getElementById('m_result').textContent=''; });
+    async function getPredictionsForPerson(p){
+      // prefer trained model prediction (with confidence); fall back to simulated model
+      if(window.trainedModel && window.trainedModelReady){
+        try{
+          const feats = personToFeatures(p);
+          const t = tf.tensor2d([feats]);
+          const out = window.trainedModel.predict(t);
+          const probs = Array.from((await out.data()));
+          const max = Math.max(...probs);
+          const idx = probs.indexOf(max);
+          const cls = CLASSES[idx];
+          out.dispose(); t.dispose();
+          return {source:'trained', class:cls, confidence: max};
+        }catch(e){ console.warn('trained predict failed', e); }
+      }
+      // fallback to simulated scoring (returns probs)
+      const sim = simulateModel(p);
+      const simProbs = sim.probs || [];
+      const simMax = simProbs.length? Math.max(...simProbs) : 0;
+      const simIdx = simProbs.length? simProbs.indexOf(simMax) : -1;
+      const simCls = simIdx>=0? CLASSES[simIdx] : sim.class;
+      return {source:'simulated', class: simCls, confidence: simMax};
+    }
+
+    document.getElementById('m_submit').addEventListener('click', async ()=>{
+      const p = {
+        name: document.getElementById('m_name').value || 'Manual Person',
+        gender: document.getElementById('m_gender').value,
+        age: parseInt(document.getElementById('m_age').value,10)||30,
+        income: parseInt(document.getElementById('m_income').value,10)||0,
+        disability: document.getElementById('m_disability').value==='1'?1:0,
+        city_pop: parseInt(document.getElementById('m_city_pop').value,10)||50000,
+        guns: document.getElementById('m_guns').value,
+        abortion: document.getElementById('m_abortion').value,
+        race: document.getElementById('m_race').value,
+        job: document.getElementById('m_job').value,
+        education: document.getElementById('m_education').value,
+        religion: document.getElementById('m_religion').value,
+        universal_healthcare: document.getElementById('m_uh').value,
+        free_college: document.getElementById('m_fc').value,
+        billionaires: document.getElementById('m_bill').value,
+        nationalize: document.getElementById('m_nationalize').value,
+        guaranteed_job: document.getElementById('m_guaranteed_job').value,
+        eviction_ban: document.getElementById('m_eviction_ban').value,
+        break_banks: document.getElementById('m_break_banks').value
+      };
+      const res = await getPredictionsForPerson(p);
+      const outEl = document.getElementById('m_result');
+      if(res && res.class){
+        const pct = (res.confidence*100).toFixed(1);
+        const label = res.class + (res.source === 'trained' ? ' (trained)' : ' (simulated)');
+        outEl.textContent = `Prediction: ${label} — confidence ${pct}%`;
+      } else {
+        outEl.textContent = 'Prediction unavailable';
+      }
+    });
+
     // Draw larger, styled SVG diagram programmatically
     (function(){
       const svg = document.querySelector('.diagram svg');
-      const width = 1400, height = 520;
-      const inputX = 160;
-      const h1X = 460, h2X = 820, h3X = 1080, outX = 1260;
+      const width = 2000, height = 760;
+      const inputX = 111;
+      const h1X = 578, h2X = 1089, h3X = 1511, outX = 1867;
 
-      const inputCount = 13; const h1=8,h2=6,h3=4,out = CLASSES.length;
+      const inputCount = 18; const h1=10,h2=8,h3=5,out = CLASSES.length;
       const nodeR = 16;
-      const marginTop = 90, marginBottom = 70;
+      const marginTop = 18, marginBottom = 40;
       function addCircle(x,y,label,opts={}){
         const g = document.createElementNS('http://www.w3.org/2000/svg','g');
         const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
@@ -579,11 +752,11 @@
         if(opts.labelLeft){
           const pad = opts.leftPad!==undefined?opts.leftPad:28;
           t.setAttribute('x', x - (r + pad)); t.setAttribute('y', y + 6);
-          t.setAttribute('font-size','13'); t.setAttribute('fill','#083462'); t.setAttribute('font-weight','700'); t.setAttribute('text-anchor','end');
+          t.setAttribute('font-size','12'); t.setAttribute('fill','#083462'); t.setAttribute('font-weight','700'); t.setAttribute('text-anchor','end');
         } else {
           const pad = opts.rightPad!==undefined?opts.rightPad:18;
           t.setAttribute('x', x + (r + pad)); t.setAttribute('y', y + 6);
-          t.setAttribute('font-size','13'); t.setAttribute('fill','#083462'); t.setAttribute('font-weight','700');
+          t.setAttribute('font-size','12'); t.setAttribute('fill','#083462'); t.setAttribute('font-weight','700');
         }
         t.textContent = label;
         g.appendChild(c); g.appendChild(t);
@@ -630,11 +803,12 @@
         return Array.from({length:n},(_,i)=> Math.round(top + i*step));
       }
 
-      const inputYs = linspace(inputCount, 0, 0); inputYs.forEach((y,i)=> addCircle(inputX,y,['age','income','disability','guns','abortion','city_pop','race','job','education','religion','universal_healthcare','free_college','billionaires'][i],{large:true,labelLeft:true,leftPad:38}));
-      const h1Ys = linspace(h1, 10, 10); h1Ys.forEach(y=> addCircle(h1X,y,''));
-      const h2Ys = linspace(h2, 20, 20); h2Ys.forEach(y=> addCircle(h2X,y,''));
-      const h3Ys = linspace(h3, 30, 30); h3Ys.forEach(y=> addCircle(h3X,y,''));
-      const outYs = linspace(out, 20, 20); outYs.forEach((y,i)=> addCircle(outX,y,CLASSES[i],{large:true,rightPad:36}));
+      const inputYs = linspace(inputCount, 10, 10);
+      inputYs.forEach((y,i)=> addCircle(inputX,y,'X'+(i+1),{labelLeft:true,leftPad:36}));
+      const h1Ys = linspace(h1, 18, 18); h1Ys.forEach(y=> addCircle(h1X,y,''));
+      const h2Ys = linspace(h2, 36, 36); h2Ys.forEach(y=> addCircle(h2X,y,''));
+      const h3Ys = linspace(h3, 54, 54); h3Ys.forEach(y=> addCircle(h3X,y,''));
+      const outYs = linspace(out, 30, 30); outYs.forEach((y,i)=> addCircle(outX,y,CLASSES[i],{large:true,rightPad:40}));
 
       // layer labels (placed above layers, centered)
       addLayerLabel(inputX, marginTop - 50, 'Input', {center:true});
